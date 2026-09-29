@@ -1906,14 +1906,23 @@ function renderShortcuts(){
 
 /* ---------- Exportar / Importar ---------- */
 function exportData(){
-  const data={tasks,shortcuts,fichas,contacts,events,creds,folders,support,supSections,templates,mentorsDir,notes:localStorage.getItem(LS_NOTES)||''};
+  const ls={};
+  for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k&&k.indexOf('dashangel')===0) ls[k]=localStorage.getItem(k); }
+  const data={__dashangel__:2, ts:new Date().toISOString(), ls:ls};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download='dashboard-angel-copia.json';a.click();toast('Copia exportada (no incluye documentos)');
+  a.download='dashboard-angel-copia.json';a.click();toast('Copia completa exportada (no incluye documentos)');
 }
 function importData(inp){
   const f=inp.files[0];if(!f)return;const r=new FileReader();
   r.onload=()=>{try{const d=JSON.parse(r.result);
+    // Formato nuevo (v2): copia completa de todas las secciones
+    if(d && d.ls && typeof d.ls==='object'){
+      if(!confirm('Se reemplazarán los datos actuales de este navegador por los de la copia. ¿Continuar?')){inp.value='';return;}
+      Object.keys(d.ls).forEach(k=>{ if(k.indexOf('dashangel')===0) localStorage.setItem(k, d.ls[k]); });
+      toast('Copia importada · recargando…'); setTimeout(()=>location.reload(),500); return;
+    }
+    // Formato antiguo (compatibilidad)
     if(Array.isArray(d.tasks))tasks=d.tasks;if(Array.isArray(d.shortcuts))shortcuts=d.shortcuts;
     if(Array.isArray(d.fichas))fichas=d.fichas;if(Array.isArray(d.contacts))contacts=d.contacts;
     if(Array.isArray(d.events))events=d.events;
