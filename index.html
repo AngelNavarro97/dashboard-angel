@@ -4072,6 +4072,9 @@ function renderFormulario(){
   const nAband=total-nComp;
   const rr=total?Math.round(nComp/total*100):0;
   const ar=total?Math.round(nAband/total*100):0;
+  const q1vals=comps.map(o=>formNum(o.comp['q1'])).filter(v=>v!=null&&v>=1&&v<=5);
+  const satAvg=q1vals.length?(q1vals.reduce((a,b)=>a+b,0)/q1vals.length):null;
+  const satPct=(satAvg!=null)?Math.round(satAvg/5*100):null;
   set('form-count', nComp);
 
   if(total===0){ body.innerHTML='<div class="fs-empty">Aún no hay respuestas en este periodo.</div>'; return; }
@@ -4083,6 +4086,7 @@ function renderFormulario(){
     +'<div class="fs-tile good"><div class="k">Completadas</div><div class="v">'+nComp+'</div><div class="s">enviaron la encuesta</div></div>'
     +'<div class="fs-tile '+(rr>=90?'good':(rr>=70?'warn':'bad'))+'"><div class="k">Tasa de respuesta</div><div class="v">'+rr+'%</div><div class="s">objetivo: 90-95%</div></div>'
     +'<div class="fs-tile '+(ar<=10?'good':(ar<=30?'warn':'bad'))+'"><div class="k">Tasa de abandono</div><div class="v">'+ar+'%</div><div class="s">'+nAband+' sin completar</div></div>'
+    +'<div class="fs-tile '+(satPct==null?'':(satPct>=80?'good':(satPct>=60?'warn':'bad')))+'"><div class="k">Satisfacci\u00f3n</div><div class="v">'+(satPct==null?'\u2014':satPct+'%')+'</div><div class="s">'+(satAvg!=null?('media '+satAvg.toFixed(2)+'/5'):'sin datos')+'</div></div>'
     +'</div>';
 
   // Idiomas
