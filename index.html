@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <title>DASHBOARD ÁNGEL</title>
 <style>
 @font-face{
@@ -1167,6 +1168,21 @@ table.grupt td.gact{text-align:right;width:34px}
     <div class="modal-acts">
       <button class="btn btn-ghost" onclick="closeOv('ov-detail')">Cerrar</button>
       <button class="btn btn-primary" id="d-edit">Editar</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOGIN SUPABASE -->
+<div class="overlay" id="ov-login">
+  <div class="modal" style="max-width:360px">
+    <h3>🔒 Acceso al panel</h3>
+    <div class="field"><label>Email</label>
+      <input type="email" id="login-email" autocomplete="username" placeholder="tu@email.com"></div>
+    <div class="field"><label>Contraseña</label>
+      <input type="password" id="login-pass" autocomplete="current-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')supaLogin()"></div>
+    <div id="login-err" style="color:#d2553f;font-size:13px;font-weight:700;display:none;margin:-4px 0 10px"></div>
+    <div class="modal-acts">
+      <button class="btn btn-primary" id="login-btn" onclick="supaLogin()" style="width:100%;justify-content:center">Entrar</button>
     </div>
   </div>
 </div>
@@ -4476,7 +4492,95 @@ function eveAddEvent(){ eveData.push({id:uid(),year:eveYear,name:'',fecha:'',mat
   const hs=document.querySelectorAll('#eve-list .fact-m-head h3'); const el=hs[hs.length-1]; if(el)el.focus(); toast('Evento añadido'); }
 function eveDelEvent(id){ const e=eveFindE(id); if(!confirm('¿Eliminar el evento '+((e&&e.name)||'')+' y su material?'))return; eveData=eveData.filter(x=>x.id!==id); saveEve(); renderEventos(); }
 
+/* ============ SINCRONIZACIÓN EN LA NUBE (SUPABASE) ============ */
+/* Pega aquí tus valores de Supabase (Project Settings → API). */
+const SUPABASE_URL = "https://kskomvkgvnlpgsrxiwcq.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imtza29tdmtndm5scGdzcnhpd2NxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3NTExNzAsImV4cCI6MjEwNjMyNzE3MH0.8_Ga7yKcCuTLHB4P88fcSMbRbDZzPtOR0ZvyG8FfHao";
+
+const SUPA_ID = Math.random().toString(36).slice(2);
+let sb=null, supaReady=false, supaApplying=false, supaPending=new Map(), supaTimer=null, supaReloadTimer=null;
+
+function supaConfigured(){ return /^https?:\/\//.test(SUPABASE_URL) && (SUPABASE_ANON_KEY||'').length>20 && !!window.supabase; }
+
+function installLSMirror(){
+  const _set=localStorage.setItem.bind(localStorage);
+  const _rem=localStorage.removeItem.bind(localStorage);
+  localStorage.setItem=function(k,v){ _set(k,v); if(supaReady && !supaApplying && String(k).indexOf('dashangel')===0){ supaPending.set(k,{v:v,del:false}); supaSchedule(); } };
+  localStorage.removeItem=function(k){ _rem(k); if(supaReady && !supaApplying && String(k).indexOf('dashangel')===0){ supaPending.set(k,{v:null,del:true}); supaSchedule(); } };
+}
+function supaSchedule(){ if(supaTimer)clearTimeout(supaTimer); supaTimer=setTimeout(supaFlush,700); }
+async function supaFlush(){
+  if(!sb||!supaPending.size)return;
+  const items=[...supaPending.entries()]; supaPending.clear();
+  const ups=items.filter(([k,o])=>!o.del).map(([k,o])=>({key:k,value:o.v,writer:SUPA_ID,updated_at:new Date().toISOString()}));
+  const dels=items.filter(([k,o])=>o.del).map(([k])=>k);
+  try{ if(ups.length) await sb.from('dashboard_kv').upsert(ups); }catch(e){ console.warn('supa upsert',e); }
+  try{ if(dels.length) await sb.from('dashboard_kv').delete().in('key',dels); }catch(e){ console.warn('supa del',e); }
+}
+async function supaHydrate(){
+  const {data,error}=await sb.from('dashboard_kv').select('key,value');
+  if(error) throw error;
+  const remote={}; (data||[]).forEach(r=>remote[r.key]=r.value);
+  const localKeys=[]; for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.indexOf('dashangel')===0)localKeys.push(k);}
+  if(Object.keys(remote).length===0){
+    // Servidor vacío: subir lo que haya en este navegador (tus datos actuales)
+    const ups=localKeys.map(k=>({key:k,value:localStorage.getItem(k),writer:SUPA_ID}));
+    if(ups.length){ try{ await sb.from('dashboard_kv').upsert(ups); }catch(e){ console.warn(e); } }
+  }else{
+    // Servidor con datos: sobrescribir lo local con lo del servidor
+    supaApplying=true;
+    localKeys.forEach(k=>{ if(!(k in remote)) localStorage.removeItem(k); });
+    Object.keys(remote).forEach(k=>{ if(remote[k]!=null) localStorage.setItem(k, remote[k]); });
+    supaApplying=false;
+  }
+}
+function supaSubscribe(){
+  try{
+    sb.channel('kv-'+SUPA_ID).on('postgres_changes',{event:'*',schema:'public',table:'dashboard_kv'}, function(payload){
+      const isDel=payload.eventType==='DELETE';
+      const row=payload.new||payload.old; if(!row)return;
+      if(payload.new && payload.new.writer===SUPA_ID) return; // ignorar mis propios cambios
+      supaApplying=true;
+      try{ if(isDel) localStorage.removeItem(row.key); else localStorage.setItem(row.key, payload.new.value); }catch(e){}
+      supaApplying=false;
+      if(supaReloadTimer)clearTimeout(supaReloadTimer);
+      supaReloadTimer=setTimeout(function(){ location.reload(); }, 1200);
+    }).subscribe();
+  }catch(e){ console.warn('supa realtime',e); }
+}
+function showLogin(msg){ const e=document.getElementById('login-err'); if(msg){e.textContent=msg;e.style.display='block';}else{e.style.display='none';} document.getElementById('ov-login').classList.add('show'); setTimeout(()=>{const i=document.getElementById('login-email'); if(i)i.focus();},60); }
+function hideLogin(){ document.getElementById('ov-login').classList.remove('show'); }
+async function supaLogin(){
+  const email=(document.getElementById('login-email').value||'').trim();
+  const pass=document.getElementById('login-pass').value||'';
+  if(!email||!pass){ showLogin('Escribe email y contraseña.'); return; }
+  const btn=document.getElementById('login-btn'); btn.disabled=true; btn.textContent='Entrando…';
+  try{
+    const {error}=await sb.auth.signInWithPassword({email:email,password:pass});
+    if(error){ btn.disabled=false; btn.textContent='Entrar'; showLogin('No se pudo entrar: '+error.message); return; }
+    await supaAfterLogin();
+  }catch(e){ btn.disabled=false; btn.textContent='Entrar'; showLogin('Error: '+(e.message||e)); }
+}
+async function supaAfterLogin(){
+  hideLogin();
+  try{ await supaHydrate(); }catch(e){ showLogin('No se pudieron cargar los datos: '+(e.message||e)); return; }
+  supaReady=true;
+  supaSubscribe();
+  bootApp();
+}
+async function startWithSupabase(){
+  if(!supaConfigured()){ bootApp(); return; }   // sin configurar / sin internet: modo local
+  try{
+    sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+    installLSMirror();
+    const {data}=await sb.auth.getSession();
+    if(data && data.session){ await supaAfterLogin(); }
+    else { showLogin(); }
+  }catch(e){ console.warn('supa init',e); bootApp(); }
+}
+
 /* ---------- Init ---------- */
+function bootApp(){
 load();seedBrandKit();populateTagFilter();populateMentors();renderAll();renderShortcuts();setupDnD();setupNotes();setupDocs();setupCalNav();
 initSupportPanels();setupCrop();renderTemplates();renderMentors();
 loadEsp();renderEspeciales();
@@ -4518,6 +4622,8 @@ function labelTables(root){
 showView('support');
 updateNavAlerts();
 tick();setInterval(tick,10000);
+}
+startWithSupabase();
 </script>
 </body>
 </html>
