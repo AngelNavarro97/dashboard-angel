@@ -1146,6 +1146,7 @@ table.grupt td.gact{text-align:right;width:34px}
     <div class="hint" style="margin-bottom:12px">Respuestas de las encuestas de satisfacci&oacute;n (ES / EN / IT). Filtra por a&ntilde;o y trimestre.</div>
     <div class="com-years" id="form-years"></div>
     <div class="com-pills" id="form-quarters"></div>
+    <div class="com-pills" id="form-langs"></div>
     <div id="form-body"></div>
   </div>
 
@@ -3983,13 +3984,15 @@ function renDel(id){ const r=renFind(id); if(!confirm('¿Eliminar a '+((r&&r.nam
 /* ================= FORMULARIO (encuestas) ================= */
 /* Pega aqui la URL CSV publicada de tu hoja de Google (Archivo > Compartir > Publicar en la web > CSV). */
 const FORM_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRBngx1ZO44oAZFztwz9Z-1gLN3AracQXtlNVSm40J11Eq1USyouo7Dhl1IACitlF-ES6Lkq4Qg9wrl/pub?gid=0&single=true&output=csv";
-let formData=null, formYear=2026, formQ=0;
+let formData=null, formYear=2026, formQ=0, formLang='';
+const FORM_LOPTS=[['','Todos'],['es','Español'],['en','Inglés'],['it','Italiano']];
 const FORM_QOPTS=[[0,'Todo el año'],[1,'1er trimestre'],[2,'2º trimestre'],[3,'3er trimestre'],[4,'4º trimestre']];
 const FORM_QNAMES=['','Satisfacción general','Recomendación (NPS)','Mentoría y formación','Rapidez y soporte','Qué valora más','Comentario / nombre'];
 const FORM_LANGNAME={es:'Español',en:'Inglés',it:'Italiano'};
 function formReady(){ return /^https?:\/\//.test(FORM_CSV_URL); }
 function formSetYear(y){ formYear=y; renderFormulario(); }
 function formSetQ(q){ formQ=q; renderFormulario(); }
+function formSetLang(l){ formLang=l; renderFormulario(); }
 function formRefresh(){ formData=null; renderFormulario(); }
 function formNum(x){ const n=parseFloat(x); return isNaN(n)?null:n; }
 function formYQ(ts){
@@ -4050,6 +4053,7 @@ function fsBars(title,sub,rows){
 function renderFormulario(){
   document.getElementById('form-years').innerHTML=GRUP_YEARS.map(y=>'<button class="com-year'+(y===formYear?' on':'')+'" onclick="formSetYear('+y+')">'+y+'</button>').join('');
   document.getElementById('form-quarters').innerHTML=FORM_QOPTS.map(q=>'<button class="com-pill'+(q[0]===formQ?' on':'')+'" onclick="formSetQ('+q[0]+')">'+q[1]+'</button>').join('');
+  document.getElementById('form-langs').innerHTML=FORM_LOPTS.map(l=>'<button class="com-pill'+(l[0]===formLang?' on':'')+'" onclick="formSetLang(\''+l[0]+'\')">'+l[1]+'</button>').join('');
   const body=document.getElementById('form-body');
   if(!formReady()){ set('form-count',0); body.innerHTML=formSetupHtml(); return; }
   if(formData===null){ body.innerHTML='<div class="fs-empty">Cargando respuestas…</div>'; formFetch(); return; }
@@ -4057,7 +4061,7 @@ function renderFormulario(){
 
   // Agrupar por sesion dentro del periodo
   const sess={};
-  formData.forEach(r=>{ const yq=formYQ(r.ts); if(!yq)return; if(yq.year!==formYear)return; if(formQ!==0&&yq.q!==formQ)return;
+  formData.forEach(r=>{ const yq=formYQ(r.ts); if(!yq)return; if(yq.year!==formYear)return; if(formQ!==0&&yq.q!==formQ)return; if(formLang && String(r.lang||'').toLowerCase()!==formLang)return;
     const id=r.sid||('x'+Math.random());
     const o=sess[id]||(sess[id]={lang:r.lang,start:false,comp:null,ab:0});
     if(r.lang)o.lang=r.lang;
@@ -4092,7 +4096,7 @@ function renderFormulario(){
   // Idiomas
   const byLang={};
   ids.forEach(i=>{ const l=sess[i].lang||'?'; byLang[l]=(byLang[l]||0)+1; });
-  h+=fsBars('Respuestas por idioma','Iniciadas en cada idioma', Object.keys(byLang).sort().map(l=>({lbl:FORM_LANGNAME[l]||l,n:byLang[l],pct:(total?Math.round(byLang[l]/total*100):0),txt:byLang[l]+(total?' ('+Math.round(byLang[l]/total*100)+'%)':'')})));
+  if(!formLang) h+=fsBars('Respuestas por idioma','Iniciadas en cada idioma', Object.keys(byLang).sort().map(l=>({lbl:FORM_LANGNAME[l]||l,n:byLang[l],pct:(total?Math.round(byLang[l]/total*100):0),txt:byLang[l]+(total?' ('+Math.round(byLang[l]/total*100)+'%)':'')})));
 
   // Abandono por pregunta
   const abandoned=ids.map(i=>sess[i]).filter(o=>!o.comp);
