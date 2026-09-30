@@ -218,6 +218,17 @@ main{max-width:1280px;margin:0 auto;padding:26px 24px 60px}
 .doc-name{font-weight:600;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .doc-meta{font-size:11.5px;color:var(--muted);margin-top:2px}
 .doc-acts{display:flex;gap:2px;flex:none}
+/* Impagos */
+.imp-estado{border:1.5px solid var(--line);border-radius:8px;padding:6px 10px;font-weight:700;font-family:inherit;font-size:12.5px;cursor:pointer;color:var(--ink);background:#fff}
+.imp-e-pendiente{color:#b23c25;background:#fbe4de;border-color:#f2b3a6}
+.imp-e-solicitado{color:#9a6a12;background:#fdf0d8;border-color:#f0d38a}
+.imp-e-pagado{color:#2e7d57;background:#e3f5ea;border-color:#a9ddc0}
+.imp-paid-head{margin:20px 2px 8px;font-weight:800;color:var(--muted);font-size:13px;text-transform:uppercase;letter-spacing:.5px}
+tr.imp-paid{background:#33333a!important}
+tr.imp-paid td{background:#33333a!important;color:#c7c7d0!important;border-color:#44444d!important}
+tr.imp-paid td.name{color:#f0f0f5!important}
+tr.imp-paid td[contenteditable]{color:#c7c7d0!important}
+tr.imp-paid .imp-estado{background:#2a2a30;color:#8fd8b0;border-color:#4a4a54}
 /* Formulario / estadisticas */
 .fs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px}
 .fs-tile{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:var(--shadow)}
@@ -846,6 +857,7 @@ table.grupt td.gact{text-align:right;width:34px}
     <button data-v="inventario" onclick="showView('inventario')">Inventario</button>
     <button data-v="activacion" onclick="showView('activacion')">Activación</button>
     <button data-v="facturas" onclick="showView('facturas')">Facturas</button>
+    <button data-v="impagos" onclick="showView('impagos')">Impagos</button>
     <button data-v="chat" onclick="showView('chat')">Chat</button>
     <button data-v="eventos" onclick="showView('eventos')">Eventos</button>
     <button data-v="docs" onclick="showView('docs')">Documentos</button>
@@ -1148,6 +1160,15 @@ table.grupt td.gact{text-align:right;width:34px}
     <div class="com-pills" id="form-quarters"></div>
     <div class="com-pills" id="form-langs"></div>
     <div id="form-body"></div>
+  </div>
+
+  <div id="view-impagos" style="display:none">
+    <div class="section-head"><h2>Impagos</h2><span class="count" id="imp-count">0</span>
+      <span class="spacer"></span>
+      <button class="btn btn-primary" onclick="impAdd()">+ Nuevo impago</button>
+    </div>
+    <div class="hint" style="margin-bottom:12px">Control de pagos pendientes. Al marcar &laquo;Pagado&raquo;, la fila sale de la lista activa y pasa al hist&oacute;rico (en gris), sin borrarse.</div>
+    <div id="imp-table"></div>
   </div>
 
 </main>
@@ -1644,7 +1665,7 @@ function toast(m){const t=document.getElementById('toast');t.textContent=m;t.cla
 function closeOv(id){document.getElementById(id).classList.remove('show')}
 function set(id,v){document.getElementById(id).textContent=v}
 function renderAll(){renderTasks();renderStats()}
-const VIEWS=['support','especiales','comisiones','comunicacion','renovaciones','formulario','inventario','activacion','facturas','chat','eventos','docs','res','info','cred'];
+const VIEWS=['support','especiales','comisiones','comunicacion','renovaciones','formulario','inventario','activacion','facturas','impagos','chat','eventos','docs','res','info','cred'];
 const COM_PIN='1279'; let comUnlocked=false;
 function comPinAsk(){ const inp=document.getElementById('compin-input'); if(inp)inp.value=''; const e=document.getElementById('compin-err'); if(e)e.style.display='none'; document.getElementById('ov-compin').classList.add('show'); setTimeout(()=>{const i=document.getElementById('compin-input'); if(i)i.focus();},60); }
 function comPinTry(){ const inp=document.getElementById('compin-input'); if(inp&&inp.value===COM_PIN){ comUnlocked=true; closeOv('ov-compin'); showView('comisiones'); } else { const e=document.getElementById('compin-err'); if(e)e.style.display='block'; if(inp){inp.value='';inp.focus();} } }
@@ -1667,6 +1688,7 @@ function showView(v){
   if(v==='inventario')renderInventario();
   if(v==='activacion')renderActivacion();
   if(v==='facturas')renderFacturas();
+  if(v==='impagos')renderImpagos();
   if(v==='chat')renderChat();
   if(v==='eventos')renderEventos();
 }
@@ -4157,6 +4179,50 @@ function renderFormulario(){
   body.innerHTML=h;
 }
 
+/* ================= IMPAGOS ================= */
+const LS_IMP='dashangel_impagos_v1';
+const IMP_ESTADOS=[['pendiente','Pendiente'],['solicitado','Solicitado'],['pagado','Pagado']];
+let impData=null;
+function loadImp(){ let d=null; try{d=JSON.parse(localStorage.getItem(LS_IMP))}catch(e){} if(!Array.isArray(d))d=[]; d.forEach(r=>{ if(!r.id)r.id=uid(); if(!r.estado)r.estado='pendiente'; }); impData=d; saveImp(); }
+function saveImp(){ try{localStorage.setItem(LS_IMP,JSON.stringify(impData))}catch(e){} }
+function impFind(id){ return impData.find(x=>x.id===id); }
+function impAdd(){ impData.unshift({id:uid(),fecha:'',nombre:'',email:'',telefono:'',producto:'',estado:'pendiente'}); saveImp(); renderImpagos();
+  const c=document.querySelector('#imp-table td[data-f="nombre"]'); if(c)c.focus(); toast('Impago añadido'); }
+function impEdit(el){ const r=impFind(el.dataset.id); if(!r)return; r[el.dataset.f]=el.textContent.trim(); saveImp(); }
+function impKey(e,el){ if(e.key==='Enter'){ e.preventDefault(); el.blur(); } }
+function impSetEstado(id,v){ const r=impFind(id); if(!r)return; r.estado=v; saveImp(); renderImpagos(); }
+function impDel(id){ const r=impFind(id); if(!confirm('¿Eliminar definitivamente este registro?'))return; impData=impData.filter(x=>x.id!==id); saveImp(); renderImpagos(); }
+function impRow(r,paid){
+  const est=IMP_ESTADOS.map(e=>'<option value="'+e[0]+'"'+(e[0]===r.estado?' selected':'')+'>'+e[1]+'</option>').join('');
+  return '<tr class="'+(paid?'imp-paid':'')+'">'
+    +'<td contenteditable="true" data-id="'+r.id+'" data-f="fecha" onblur="impEdit(this)" onkeydown="impKey(event,this)">'+esc(r.fecha||'')+'</td>'
+    +'<td class="name" contenteditable="true" data-id="'+r.id+'" data-f="nombre" onblur="impEdit(this)" onkeydown="impKey(event,this)">'+esc(r.nombre||'')+'</td>'
+    +'<td contenteditable="true" data-id="'+r.id+'" data-f="email" onblur="impEdit(this)" onkeydown="impKey(event,this)">'+esc(r.email||'')+'</td>'
+    +'<td contenteditable="true" data-id="'+r.id+'" data-f="telefono" onblur="impEdit(this)" onkeydown="impKey(event,this)">'+esc(r.telefono||'')+'</td>'
+    +'<td contenteditable="true" data-id="'+r.id+'" data-f="producto" onblur="impEdit(this)" onkeydown="impKey(event,this)">'+esc(r.producto||'')+'</td>'
+    +'<td><select class="imp-estado imp-e-'+r.estado+'" onchange="impSetEstado(\''+r.id+'\',this.value)">'+est+'</select></td>'
+    +'<td class="act"><button class="esp-del" title="Eliminar" onclick="impDel(\''+r.id+'\')">&#128465;</button></td>'
+    +'</tr>';
+}
+function renderImpagos(){
+  if(!impData) loadImp();
+  const activos=impData.filter(r=>r.estado!=='pagado');
+  const pagados=impData.filter(r=>r.estado==='pagado');
+  set('imp-count', activos.length);
+  const head='<thead><tr><th>Fecha</th><th class="name">Nombre</th><th>Email</th><th>Teléfono</th><th>Producto</th><th class="mth">Estado</th><th></th></tr></thead>';
+  let h='<div class="esp-wrap"><table class="esp">'+head+'<tbody>';
+  if(!activos.length) h+='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:22px">Sin impagos pendientes. Pulsa «+ Nuevo impago».</td></tr>';
+  else activos.forEach(r=>{ h+=impRow(r,false); });
+  h+='</tbody></table></div>';
+  if(pagados.length){
+    h+='<div class="imp-paid-head">Pagados ('+pagados.length+')</div>';
+    h+='<div class="esp-wrap"><table class="esp">'+head+'<tbody>';
+    pagados.forEach(r=>{ h+=impRow(r,true); });
+    h+='</tbody></table></div>';
+  }
+  document.getElementById('imp-table').innerHTML=h;
+}
+
 /* ================= INVENTARIO ================= */
 const LS_INV='dashangel_inventario_v1';
 const INV_CATS=['Merchandising','Material talleres/eventos','Libros','Otros'];
@@ -4607,6 +4673,7 @@ renderRenovaciones();
 loadInv();renderInventario();
 loadAct();renderActivacion();
 loadFact();renderFacturas();
+loadImp();renderImpagos();
 loadChat();renderChat();
 loadEve();renderEventos();
 /* Etiqueta cada celda con su cabecera para la vista móvil (tarjetas apiladas) */
