@@ -4043,7 +4043,7 @@ function fsBars(title,sub,rows){
   const max=Math.max(1,...rows.map(r=>r.n));
   let h='<div class="fs-card"><h3>'+title+'</h3>'+(sub?'<div class="sub">'+sub+'</div>':'');
   rows.forEach(r=>{ h+='<div class="fs-row"><span class="lbl">'+esc(r.lbl)+'</span>'
-    +'<span class="barwrap"><span class="bar '+(r.cls||'')+'" style="width:'+Math.round(r.n/max*100)+'%"></span></span>'
+    +'<span class="barwrap"><span class="bar '+(r.cls||'')+'" style="width:'+(r.pct!=null?Math.max(0,Math.min(100,Math.round(r.pct))):Math.round(r.n/max*100))+'%"></span></span>'
     +'<span class="val">'+r.txt+'</span></div>'; });
   return h+'</div>';
 }
@@ -4088,15 +4088,15 @@ function renderFormulario(){
   // Idiomas
   const byLang={};
   ids.forEach(i=>{ const l=sess[i].lang||'?'; byLang[l]=(byLang[l]||0)+1; });
-  h+=fsBars('Respuestas por idioma','Iniciadas en cada idioma', Object.keys(byLang).sort().map(l=>({lbl:FORM_LANGNAME[l]||l,n:byLang[l],txt:byLang[l]})));
+  h+=fsBars('Respuestas por idioma','Iniciadas en cada idioma', Object.keys(byLang).sort().map(l=>({lbl:FORM_LANGNAME[l]||l,n:byLang[l],pct:(total?Math.round(byLang[l]/total*100):0),txt:byLang[l]+(total?' ('+Math.round(byLang[l]/total*100)+'%)':'')})));
 
   // Abandono por pregunta
   const abandoned=ids.map(i=>sess[i]).filter(o=>!o.comp);
   const funnel=[0,0,0,0,0,0,0]; // idx 0 = desconocido, 1..6
   abandoned.forEach(o=>{ const q=(o.ab>=1&&o.ab<=6)?o.ab:0; funnel[q]++; });
   const frows=[];
-  for(let q=1;q<=6;q++) frows.push({lbl:'P'+q+' · '+FORM_QNAMES[q], n:funnel[q], txt:funnel[q], cls:'r'});
-  if(funnel[0]) frows.push({lbl:'Sin dato', n:funnel[0], txt:funnel[0], cls:'o'});
+  for(let q=1;q<=6;q++) frows.push({lbl:'P'+q+' · '+FORM_QNAMES[q], n:funnel[q], pct:(nAband?Math.round(funnel[q]/nAband*100):0), txt:funnel[q]+(nAband?' ('+Math.round(funnel[q]/nAband*100)+'%)':''), cls:'r'});
+  if(funnel[0]) frows.push({lbl:'Sin dato', n:funnel[0], pct:(nAband?Math.round(funnel[0]/nAband*100):0), txt:funnel[0]+(nAband?' ('+Math.round(funnel[0]/nAband*100)+'%)':''), cls:'o'});
   h+=fsBars('Abandono por pregunta','En qué pregunta dejaron la encuesta (de las '+nAband+' no completadas)', frows);
 
   // Estadisticas por respuesta (de las completadas)
@@ -4109,7 +4109,7 @@ function renderFormulario(){
       const dist=[0,0,0,0,0];
       vals.forEach(v=>dist[Math.round(v)-1]++);
       const faces=['😞 1','😕 2','😐 3','🙂 4','😍 5'];
-      const rows=dist.map((n,i)=>({lbl:faces[i],n:n,txt:n+' ('+Math.round(n/vals.length*100)+'%)',cls:i>=3?'g':(i===2?'o':'r')}));
+      const rows=dist.map((n,i)=>({lbl:faces[i],n:n,pct:Math.round(n/vals.length*100),txt:n+' ('+Math.round(n/vals.length*100)+'%)',cls:i>=3?'g':(i===2?'o':'r')}));
       return fsBars(title,'Media: <b>'+avg.toFixed(2)+'</b> / 5 · '+vals.length+' respuestas', rows);
     };
     h+=scaleStat('q1','Satisfacción general');
@@ -4121,16 +4121,16 @@ function renderFormulario(){
     if(nps.length){
       const prom=nps.filter(v=>v>=9).length, pas=nps.filter(v=>v>=7&&v<=8).length, det=nps.filter(v=>v<=6).length;
       const score=Math.round((prom/nps.length - det/nps.length)*100);
-      const rows=[{lbl:'Promotores (9-10)',n:prom,txt:prom+' ('+Math.round(prom/nps.length*100)+'%)',cls:'g'},
-                  {lbl:'Pasivos (7-8)',n:pas,txt:pas+' ('+Math.round(pas/nps.length*100)+'%)',cls:'o'},
-                  {lbl:'Detractores (0-6)',n:det,txt:det+' ('+Math.round(det/nps.length*100)+'%)',cls:'r'}];
+      const rows=[{lbl:'Promotores (9-10)',n:prom,pct:Math.round(prom/nps.length*100),txt:prom+' ('+Math.round(prom/nps.length*100)+'%)',cls:'g'},
+                  {lbl:'Pasivos (7-8)',n:pas,pct:Math.round(pas/nps.length*100),txt:pas+' ('+Math.round(pas/nps.length*100)+'%)',cls:'o'},
+                  {lbl:'Detractores (0-6)',n:det,pct:Math.round(det/nps.length*100),txt:det+' ('+Math.round(det/nps.length*100)+'%)',cls:'r'}];
       h+=fsBars('Recomendación (NPS)','NPS: <b>'+score+'</b> (de -100 a +100) · '+nps.length+' respuestas', rows);
     }
 
     // Q5 chips
     const chipCount={};
     comps.forEach(o=>{ String(o.comp['q5']||'').split(';').map(x=>x.trim()).filter(Boolean).forEach(x=>{ chipCount[x]=(chipCount[x]||0)+1; }); });
-    const chipRows=Object.keys(chipCount).map(k=>({lbl:k,n:chipCount[k],txt:chipCount[k]})).sort((a,b)=>b.n-a.n);
+    const chipRows=Object.keys(chipCount).map(k=>({lbl:k,n:chipCount[k],pct:(nComp?Math.round(chipCount[k]/nComp*100):0),txt:chipCount[k]+(nComp?' ('+Math.round(chipCount[k]/nComp*100)+'%)':'')})).sort((a,b)=>b.n-a.n);
     if(chipRows.length) h+=fsBars('Qué valoran más','Aspectos más marcados', chipRows);
 
     // Q6 comentarios
