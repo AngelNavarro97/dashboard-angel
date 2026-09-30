@@ -1168,6 +1168,8 @@ table.grupt td.gact{text-align:right;width:34px}
       <button class="btn btn-primary" onclick="impAdd()">+ Nuevo impago</button>
     </div>
     <div class="hint" style="margin-bottom:12px">Control de pagos pendientes. Al marcar &laquo;Pagado&raquo;, la fila sale de la lista activa y pasa al hist&oacute;rico (en gris), sin borrarse.</div>
+    <div class="com-years" id="imp-years"></div>
+    <div class="com-pills com-pills-sm" id="imp-months"></div>
     <div id="imp-table"></div>
   </div>
 
@@ -4182,11 +4184,17 @@ function renderFormulario(){
 /* ================= IMPAGOS ================= */
 const LS_IMP='dashangel_impagos_v1';
 const IMP_ESTADOS=[['pendiente','Pendiente'],['solicitado','Solicitado'],['pagado','Pagado']];
+const IMP_LANGS=[['es','Español'],['en','Inglés'],['it','Italiano']];
 let impData=null;
-function loadImp(){ let d=null; try{d=JSON.parse(localStorage.getItem(LS_IMP))}catch(e){} if(!Array.isArray(d))d=[]; d.forEach(r=>{ if(!r.id)r.id=uid(); if(!r.estado)r.estado='pendiente'; }); impData=d; saveImp(); }
+let impYear=(function(){const y=new Date().getFullYear();return (y>=2026&&y<=2030)?y:2026;})(), impMonth=new Date().getMonth()+1;
+function impSetYear(y){ impYear=y; renderImpagos(); }
+function impSetMonth(m){ impMonth=m; renderImpagos(); }
+function impInPeriod(r){ const k=comDateKey(r.fecha); if(k===null) return true; return Math.floor(k/10000)===impYear && Math.floor(k/100)%100===impMonth; }
+function impSetIdioma(id,v){ const r=impFind(id); if(!r)return; r.idioma=v; saveImp(); }
+function loadImp(){ let d=null; try{d=JSON.parse(localStorage.getItem(LS_IMP))}catch(e){} if(!Array.isArray(d))d=[]; d.forEach(r=>{ if(!r.id)r.id=uid(); if(!r.estado)r.estado='pendiente'; if(!r.idioma)r.idioma='es'; }); impData=d; saveImp(); }
 function saveImp(){ try{localStorage.setItem(LS_IMP,JSON.stringify(impData))}catch(e){} }
 function impFind(id){ return impData.find(x=>x.id===id); }
-function impAdd(){ impData.unshift({id:uid(),fecha:'',nombre:'',email:'',telefono:'',producto:'',estado:'pendiente'}); saveImp(); renderImpagos();
+function impAdd(){ impData.unshift({id:uid(),fecha:'',nombre:'',email:'',telefono:'',producto:'',idioma:'es',estado:'pendiente'}); saveImp(); renderImpagos();
   const c=document.querySelector('#imp-table td[data-f="nombre"]'); if(c)c.focus(); toast('Impago añadido'); }
 function impEdit(el){ const r=impFind(el.dataset.id); if(!r)return; r[el.dataset.f]=el.textContent.trim(); saveImp(); }
 function impKey(e,el){ if(e.key==='Enter'){ e.preventDefault(); el.blur(); } }
@@ -4200,18 +4208,21 @@ function impRow(r,paid){
     +'<td contenteditable="true" data-id="'+r.id+'" data-f="email" onblur="impEdit(this)" onkeydown="impKey(event,this)">'+esc(r.email||'')+'</td>'
     +'<td contenteditable="true" data-id="'+r.id+'" data-f="telefono" onblur="impEdit(this)" onkeydown="impKey(event,this)">'+esc(r.telefono||'')+'</td>'
     +'<td contenteditable="true" data-id="'+r.id+'" data-f="producto" onblur="impEdit(this)" onkeydown="impKey(event,this)">'+esc(r.producto||'')+'</td>'
-    +'<td><select class="imp-estado imp-e-'+r.estado+'" onchange="impSetEstado(\''+r.id+'\',this.value)">'+est+'</select></td>'
+    +'<td><select class="imp-estado" onchange="impSetIdioma(\''+r.id+'\',this.value)">'+IMP_LANGS.map(l=>'<option value="'+l[0]+'"'+(l[0]===(r.idioma||'es')?' selected':'')+'>'+l[1]+'</option>').join('')+'</select></td>'+'<td><select class="imp-estado imp-e-'+r.estado+'" onchange="impSetEstado(\''+r.id+'\',this.value)">'+est+'</select></td>'
     +'<td class="act"><button class="esp-del" title="Eliminar" onclick="impDel(\''+r.id+'\')">&#128465;</button></td>'
     +'</tr>';
 }
 function renderImpagos(){
   if(!impData) loadImp();
-  const activos=impData.filter(r=>r.estado!=='pagado');
-  const pagados=impData.filter(r=>r.estado==='pagado');
+  const yb=document.getElementById('imp-years'); if(yb) yb.innerHTML=GRUP_YEARS.map(y=>'<button class="com-year'+(y===impYear?' on':'')+'" onclick="impSetYear('+y+')">'+y+'</button>').join('');
+  const mb=document.getElementById('imp-months'); if(mb) mb.innerHTML=GRUP_MONTHS.map((mn,i)=>'<button class="com-pill'+((i+1)===impMonth?' on':'')+'" onclick="impSetMonth('+(i+1)+')">'+mn+'</button>').join('');
+  const inper=impData.filter(impInPeriod);
+  const activos=inper.filter(r=>r.estado!=='pagado');
+  const pagados=inper.filter(r=>r.estado==='pagado');
   set('imp-count', activos.length);
-  const head='<thead><tr><th>Fecha</th><th class="name">Nombre</th><th>Email</th><th>Teléfono</th><th>Producto</th><th class="mth">Estado</th><th></th></tr></thead>';
+  const head='<thead><tr><th>Fecha</th><th class="name">Nombre</th><th>Email</th><th>Teléfono</th><th>Producto</th><th>Idioma</th><th class="mth">Estado</th><th></th></tr></thead>';
   let h='<div class="esp-wrap"><table class="esp">'+head+'<tbody>';
-  if(!activos.length) h+='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:22px">Sin impagos pendientes. Pulsa «+ Nuevo impago».</td></tr>';
+  if(!activos.length) h+='<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:22px">Sin impagos pendientes en '+GRUP_MONTHS_FULL[impMonth-1]+' '+impYear+'. Pulsa «+ Nuevo impago».</td></tr>';
   else activos.forEach(r=>{ h+=impRow(r,false); });
   h+='</tbody></table></div>';
   if(pagados.length){
