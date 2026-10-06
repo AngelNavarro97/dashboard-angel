@@ -3311,6 +3311,21 @@ function comSyncRenovConfirmada(renov){
   saveRen();
   if(document.getElementById('view-renovaciones') && document.getElementById('view-renovaciones').style.display!=='none') renderRenovaciones();
 }
+function comUnsyncRenovConfirmada(renov){
+  if(!renov) return; if(!renData){ try{loadRen();}catch(e){return;} }
+  const name=String(renov.cliente||'').trim(); if(!name) return;
+  const key=name.toLowerCase();
+  let lang=comFlagToLang(renov.idioma), student=null;
+  (renData[lang]||[]).forEach(r=>{ if(!student && String(r.name||'').trim().toLowerCase()===key) student=r; });
+  if(!student){ ['es','en','it'].forEach(l=>{ (renData[l]||[]).forEach(r=>{ if(!student && String(r.name||'').trim().toLowerCase()===key){ student=r; } }); }); }
+  let baseFecha;
+  if(student){ baseFecha=student.fechaFin; if((student.renueva||'')==='si') student.renueva=''; }
+  else { baseFecha=renov.fecha; }
+  const nf=comAddOneYear(baseFecha);
+  if(nf){ ['es','en','it'].forEach(l=>{ renData[l]=(renData[l]||[]).filter(r=> !(String(r.name||'').trim().toLowerCase()===key && r.fechaFin===nf && (r.renueva||'')==='') ); }); }
+  saveRen();
+  if(document.getElementById('view-renovaciones') && document.getElementById('view-renovaciones').style.display!=='none') renderRenovaciones();
+}
 function renApplyPhones(){
   if(localStorage.getItem('dashangel_ren_phones2_v1')) return;
   if(!renData) return;
@@ -3345,8 +3360,10 @@ function renBackfill2027FromCom(){
 }
 function comToggleTipo(mid,id){
   const m=comMonth(mid); const r=(m.renovaciones||[]).find(x=>x.id===id); if(!r) return;
-  r.tipo=comIsConf(r)?'Renovación pendiente':'Renovación'; saveCom();
-  if(comIsConf(r)) comSyncRenovConfirmada(r);
+  const wasConf=comIsConf(r);
+  r.tipo=wasConf?'Renovación pendiente':'Renovación'; saveCom();
+  if(!wasConf && comIsConf(r)) comSyncRenovConfirmada(r);
+  else if(wasConf && !comIsConf(r)) comUnsyncRenovConfirmada(r);
   renderComisiones();
 }
 function comAddVenta(mid){ const m=comMonth(mid); m.ventas.push({id:uid(),fecha:'',producto:'',cliente:'',importe:''}); saveCom(); renderComisiones(); }
