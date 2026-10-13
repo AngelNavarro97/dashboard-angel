@@ -789,6 +789,8 @@ table.comlog tr.pend td{background:repeating-linear-gradient(45deg,#faf7f2,#faf7
   border-radius:999px;padding:3px 9px;font-size:11.5px;font-weight:700;white-space:nowrap}
 .com-chip.ok{background:#e7f4ee;color:var(--done)}
 .com-chip.pe{background:#f6efe2;color:#b8860b}
+.com-chip.no{background:#fbe4de;color:#b23c25}
+.comlog tr.norenov td{opacity:.6}
 .com-foot-row td{background:var(--brand-soft);font-weight:700;color:var(--brand)}
 .com-addrow{border:none;background:transparent;color:var(--brand-3);cursor:pointer;font-weight:600;
   font-size:12.5px;padding:7px 9px}
@@ -3025,7 +3027,8 @@ function loadCom(){
 function saveCom(){ try{localStorage.setItem(LS_COM,JSON.stringify(comData))}catch(e){} }
 function comQuarter(){ return comData.quarters.find(q=>q.id===comQ); }
 function comMonth(mid){ const q=comQuarter(); return q&&(q.months||[]).find(m=>m.id===mid); }
-function comIsConf(r){ return !String(r.tipo||'').toLowerCase().includes('pendiente'); }
+function comRenState(r){ const t=String(r.tipo||'').toLowerCase(); if(t.includes('no renueva')||t.includes('no renov')) return 'no'; if(t.includes('pendiente')) return 'pend'; return 'si'; }
+function comIsConf(r){ return comRenState(r)==='si'; }
 function comNum(v){ const n=parseFloat(String(v).replace(/[^0-9.,-]/g,'').replace(',','.')); return isNaN(n)?0:n; }
 function comDateKey(s){
   const m=String(s||'').trim().match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
@@ -3262,10 +3265,12 @@ function renderComisiones(){
     h+='<div class="com-sub"><h4>Renovaciones <span class="com-tag">'+conf+' conf.</span></h4><div class="com-tblwrap"><table class="comlog">'
       +'<thead><tr><th>Fecha</th><th>Estado</th><th>Cliente</th><th>Importe</th><th>Idioma</th><th></th></tr></thead><tbody>';
     comSortByDate(m.renovaciones).forEach(r=>{
-      const conf1=comIsConf(r);
-      h+='<tr class="'+(conf1?'':'pend')+'">'
+      const stt=comRenState(r);
+      const chipCls=(stt==='si'?'ok':(stt==='pend'?'pe':'no'));
+      const chipTxt=(stt==='si'?'✓ Renueva':(stt==='pend'?'⏳ Pendiente':'✕ No renueva'));
+      h+='<tr class="'+(stt==='si'?'':(stt==='pend'?'pend':'norenov'))+'">'
         +ce(m.id,r.id,'r','fecha',r.fecha)
-        +'<td><span class="com-chip '+(conf1?'ok':'pe')+'" onclick="comToggleTipo(\''+m.id+'\',\''+r.id+'\')">'+(conf1?'✓ Confirmada':'⏳ Pendiente')+'</span></td>'
+        +'<td><span class="com-chip '+chipCls+'" onclick="comToggleTipo(\''+m.id+'\',\''+r.id+'\')">'+chipTxt+'</span></td>'
         +'<td class="com-clicell">'+comCliCell(m.id,r)+'</td>'
         +ce(m.id,r.id,'r','importe',r.importe,'imp')
         +ce(m.id,r.id,'r','idioma',r.idioma)
@@ -3360,11 +3365,20 @@ function renBackfill2027FromCom(){
 }
 function comToggleTipo(mid,id){
   const m=comMonth(mid); const r=(m.renovaciones||[]).find(x=>x.id===id); if(!r) return;
-  const wasConf=comIsConf(r);
-  r.tipo=wasConf?'Renovación pendiente':'Renovación'; saveCom();
-  if(!wasConf && comIsConf(r)) comSyncRenovConfirmada(r);
-  else if(wasConf && !comIsConf(r)) comUnsyncRenovConfirmada(r);
+  const st=comRenState(r);
+  const next=(st==='pend'?'si':(st==='si'?'no':'pend'));
+  r.tipo=(next==='si'?'Renovación':(next==='pend'?'Renovación pendiente':'Renovación no renueva')); saveCom();
+  if(next==='si') comSyncRenovConfirmada(r);
+  else { comUnsyncRenovConfirmada(r); if(next==='no') comRemoveFromRenov(r); }
   renderComisiones();
+}
+function comRemoveFromRenov(renov){
+  if(!renData){ try{loadRen();}catch(e){return;} }
+  const key=String(renov.cliente||'').trim().toLowerCase(); if(!key) return;
+  const _n=s=>String(s||'').trim().toLowerCase();
+  let changed=false;
+  ['es','en','it'].forEach(l=>{ const before=(renData[l]||[]).length; renData[l]=(renData[l]||[]).filter(r=>_n(r.name)!==key); if(renData[l].length!==before)changed=true; });
+  if(changed){ saveRen(); if(document.getElementById('view-renovaciones') && document.getElementById('view-renovaciones').style.display!=='none') renderRenovaciones(); }
 }
 function comAddVenta(mid){ const m=comMonth(mid); m.ventas.push({id:uid(),fecha:'',producto:'',cliente:'',importe:''}); saveCom(); renderComisiones(); }
 function comAddRenov(mid){ const m=comMonth(mid); m.renovaciones.push({id:uid(),fecha:'',tipo:'Renovación',cliente:'',importe:'',idioma:''}); saveCom(); renderComisiones(); }
